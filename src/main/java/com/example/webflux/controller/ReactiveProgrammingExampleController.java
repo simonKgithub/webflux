@@ -5,6 +5,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
 import java.util.ArrayList;
@@ -14,6 +15,32 @@ import java.util.List;
 @RequestMapping("/reactive")
 @Slf4j
 public class ReactiveProgrammingExampleController {
+
+
+    @GetMapping("/onenine/legacy2")
+    public Mono<List<Integer>> produceOneToNineLegacy2(){
+        return Mono.defer(() -> {
+            List<Integer> sink = new ArrayList<>();
+            for (int i = 1; i <= 9; i++) {
+                try {Thread.sleep(500);} catch (InterruptedException e) {} //4.5초 소요
+                sink.add(i);
+            }
+            return Mono.just(sink);
+        }).subscribeOn(Schedulers.boundedElastic());
+    }
+
+    //1~9까지 출력하는 api
+    @GetMapping("/onenine/legacy")
+    public Mono<List<Integer>> produceOneToNineLegacy(){
+        return Mono.<List<Integer>>fromCallable(()->{
+            List<Integer> sink = new ArrayList<>();
+            for (int i = 1; i <= 9; i++) {
+                try {Thread.sleep(500);} catch (InterruptedException e) {} //4.5초 소요
+                sink.add(i);
+            }
+            return sink;
+        }).subscribeOn(Schedulers.boundedElastic());
+    }
 
     //1~9까지 출력하는 api
     @GetMapping("/onenine/list")
