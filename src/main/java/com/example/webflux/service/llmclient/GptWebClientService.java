@@ -1,5 +1,7 @@
 package com.example.webflux.service.llmclient;
 
+import com.example.webflux.exception.CustomErrorType;
+import com.example.webflux.exception.ErrorTypeException;
 import com.example.webflux.model.llmclient.LlmChatRequestDto;
 import com.example.webflux.model.llmclient.LlmChatResponseDto;
 import com.example.webflux.model.llmclient.LlmType;
@@ -11,7 +13,10 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+
+import java.util.Optional;
 
 /**
  * GptWebClientService
@@ -41,7 +46,7 @@ public class GptWebClientService implements LlmWebClientService{
                 .onStatus(HttpStatusCode::is4xxClientError, (clientResponse -> {
                     return clientResponse.bodyToMono(String.class).flatMap(body->{
                         log.error("Error Response: {}", body);
-                        return Mono.error(new RuntimeException("API 요청 실패: " + body));
+                        return Mono.error(new ErrorTypeException("API 요청 실패: " + body, CustomErrorType.GPT_RESPONSE_ERROR));
                     });
                 }))
                 .bodyToMono(GptChatResponseDto.class)
@@ -52,5 +57,27 @@ public class GptWebClientService implements LlmWebClientService{
     @Override
     public LlmType getLlmType() {
         return LlmType.GPT;
+    }
+
+    @Override
+    public Flux<LlmChatResponseDto> getChatCompletionStream(LlmChatRequestDto requestDto) {
+        GptChatRequestDto gptChatRequestDto = new GptChatRequestDto(requestDto);
+        gptChatRequestDto.setStream(true);
+
+        return webClient.post()
+                .uri("https://api.openai.com/v1/chat/completions")
+                .header("Authorization", "Bearer " + gptApiKey)
+                .bodyValue(gptChatRequestDto)
+                .retrieve()
+                .onStatus(HttpStatusCode::is4xxClientError, (clientResponse -> {
+                    return clientResponse.bodyToMono(String.class).flatMap(body->{
+                        log.error("Error Response: {}", body);
+                        return Mono.error(new ErrorTypeException("API 요청 실패: " + body, CustomErrorType.GPT_RESPONSE_ERROR));
+                    });
+                }))
+                .bodyToFlux(GptChatResponseDto.class)
+                .takeWhile(response -> Optional.ofNullable(response.getSingleChoice().getFinish_reason()).isEmpty())
+                .map(LlmChatResponseDto::getLlmChatResponseDtoFromStream)
+                ;
     }
 }
